@@ -1,14 +1,69 @@
-from typing import Optional
+from random import randint
+import subprocess
+import os
 
-from fastapi import FastAPI
+from pydantic import BaseModel
+from fastapi import FastAPI # type: ignore
 
 app = FastAPI()
+LANGUAGES = {
+    "python": {
+        "ext": "py",
+        "runCMD": ["python"]
+    },
+    "javascript": {
+        "ext": "js",
+        "runCMD": ["node"]
+    }
+}
+
+class Exec:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def run(self, code: str, language: str) -> str:
+        if language in LANGUAGES:
+            code_file = ""
+            path = f"{language}_temp_{randint(0, 1000)}.{LANGUAGES[language]['ext']}"
+            code_file = os.path.join(path)
+            with open(code_file, "w") as f:
+                f.write(code)
+            
+            result = subprocess.run(LANGUAGES[language]["runCMD"] + [code_file], capture_output=True, text=True)
+            os.remove(path)
+            return result.stdout
+
+        else:
+            return "Invalid Language"
+    
+    @classmethod
+    def get_langs(self):
+        return list(LANGUAGES.keys())
+
+class CODEOBJ(BaseModel):
+    code: str
+    language: str
 
 
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
+@app.get('/getlangs')
+async def get_langs():
+    return {
+        "languages": Exec.get_langs()
+    }
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: Optional[str] = None):
-    return {"item_id": item_id, "q": q}
+@app.post('/exec')
+async def main(codeObj: CODEOBJ):
+    res = Exec.run(codeObj.code, codeObj.language)
+    
+    if res != "Invalid Language":
+        return {
+            "success": True,
+            "stdout": res
+        }
+    else: 
+        return {
+            "success": False,
+            "stdout": "",
+            "error": res
+        }
